@@ -1,52 +1,63 @@
 const fs = require('fs');
+require("dotenv").config();
 const express = require('express');
-const {MongoClient} = require('mongodb');
-const {ApolloServer} = require('apollo-server-express');
-require('dotenv').config();
+const { ApolloServer } = require('apollo-server-express');
+//const { Kind } = require('graphql/language');
+const { MongoClient } = require("mongodb");
 
-const url = process.env.DB_URL || 'mongodb+srv://vaidehim:<password>@inventorymanagementclus.lpziu.mongodb.net/myFirstDatabase?retryWrites=true&w=majority';
+const url = process.env.DB_URL;
+const port = process.env.API_SERVER_PORT || 3000;
 let db;
+let introMessage = "Inventory Management System";
+const productDB = [];
+const resolvers = {
+    Query: {
+        introMessage: () => introMessage,
+        productList,
+    },
+    Mutation: {
+        setIntroMessage,
+        productAdd,
+    },
+}
+
+function setIntroMessage(_, { message }){
+    return (introMessage = message);
+}
 
 async function productList() {
-    const productDB = await db.collection('products').find({}).toArray();
-    return productDB;
+    const products = await db.collection("products").find({}).toArray();
+    return products;
 }
 
 async function getNextSequence(name) {
-    const result = await db.collection('counters').findOneAndUpdate(
-        {_id: name}, 
-        {$inc: {current: 1}},
-        {returnOriginal: false},
+    const result = await db.collection("counters").findOneAndUpdate(
+        { _id: name },
+        { $inc: {current: 1}},
+        {returnOriginal: false}
     );
     return result.value.current;
 }
 
-async function productAdd(_,{ product }){
-    const productNew = product;
-    productNew.id = await getNextSequence('products');
-    const result = await db.collection('products').insertOne(product);
-    const savedProduct = await db.collection('products').findOne({_id: result.insertedId });
-    return savedProduct;
-}
-
-const resolvers = {
-    Query: {
-        productList,
-    },
-    Mutation: {
-        productAdd,
-    }
+async function productAdd(_, { product }) {
+    product.id = await getNextSequence("products");
+    const result = await db.collection("products").insertOne(product);
+    const productSave = await db.collection("products").findOne({ _id: result.insertedId });
+    return productSave;
 }
 
 async function connectToDb() {
-    const client = new MongoClient(url, { useNewUrlParser: true, useUnifiedTopology: treu });
+    const client = new MongoClient(url, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    });
     await client.connect();
-    console.log('Connected to MongoDB at', url);
+    console.log("Connected to MongoDB at URL ", url);
     db = client.db();
 }
 
 const server = new ApolloServer({
-    typeDefs: fs.readFileSync('schema.graphql','utf-8'),
+    typeDefs: fs.readFileSync('schema.graphql', 'utf-8'),
     resolvers,
 });
 
@@ -54,15 +65,13 @@ const app = express();
 
 server.applyMiddleware({ app, path: '/graphql' });
 
-const port = process.env.API_SERVER_PORT || 3000;
-
-(async () => {
+(async function() {
     try {
         await connectToDb();
         app.listen(port, () => {
-            console.log(`API Server started on port ${port}`);
+            console.log(`API server started on port ${port}`);
         });
-    } catch (err) {
-        console.log('ERROR:', err);
+    } catch(err) {
+        console.log("ERROR: ",err);
     }
 })();
